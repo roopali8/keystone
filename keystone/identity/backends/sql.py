@@ -45,6 +45,13 @@ class User(sql.ModelBase, sql.DictBase):
             del d['default_project_id']
         return d
 
+class UserHistory(sql.ModelBase, sql.DictBase):
+    __tablename__ = 'user_history'
+    attributes = ['id',  'password', 'date']
+    id = sql.Column(sql.String(64), primary_key=True)
+    password = sql.Column(sql.String(128))
+    date = sql.Column(sql.DateTime, default=None)
+
 
 class Group(sql.ModelBase, sql.DictBase):
     __tablename__ = 'group'

@@ -167,6 +167,15 @@ def upgrade(migrate_engine):
         mysql_engine='InnoDB',
         mysql_charset='utf8')
 
+    user_history = sql.Table(
+        'user_history', meta,
+        sql.Column('id', sql.String(length=64)),
+        sql.Column('password', sql.String(length=128)),
+        sql.Column('date', sql.DateTime),
+        mysql_engine='InnoDB',
+        mysql_charset='utf8')
+
+
     user_group_membership = sql.Table(
         'user_group_membership', meta,
         sql.Column('user_id', sql.String(length=64), primary_key=True),
@@ -205,7 +214,7 @@ def upgrade(migrate_engine):
     # create all tables
     tables = [credential, domain, endpoint, group,
               policy, project, role, service,
-              token, trust, trust_role, user,
+              token, trust, trust_role, user, user_history,
               user_group_membership, region, assignment]
 
     for table in tables:
