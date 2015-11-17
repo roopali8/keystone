@@ -18,6 +18,7 @@ import abc
 import functools
 import os
 import uuid
+import datetime
 
 from oslo_config import cfg
 from oslo_log import log
@@ -33,7 +34,6 @@ from keystone import exception
 from keystone.i18n import _, _LW
 from keystone.identity.mapping_backends import mapping
 from keystone import notifications
-
 
 CONF = cfg.CONF
 
@@ -184,7 +184,7 @@ class DomainConfigs(dict):
                         self._load_config_from_file(
                             resource_api, [os.path.join(r, fname)],
                             fname[len(DOMAIN_CONF_FHEAD):
-                                  -len(DOMAIN_CONF_FTAIL)])
+                            -len(DOMAIN_CONF_FTAIL)])
                     else:
                         LOG.debug(('Ignoring file (%s) while scanning domain '
                                    'config directory'),
@@ -277,7 +277,7 @@ class DomainConfigs(dict):
             msg = _('Exceeded attempts to register domain %(domain)s to use '
                     'the SQL driver, the last  domain that appears to have '
                     'had it is %(last_domain)s, giving up') % {
-                        'domain': domain_id, 'last_domain': domain_registered}
+                      'domain': domain_id, 'last_domain': domain_registered}
             raise exception.UnexpectedError(msg)
 
         domain_config = {}
@@ -315,7 +315,7 @@ class DomainConfigs(dict):
         for domain in resource_api.list_domains():
             domain_config_options = (
                 self.domain_config_api.
-                get_config_with_sensitive_info(domain['id']))
+                    get_config_with_sensitive_info(domain['id']))
             if domain_config_options:
                 self._load_config_from_database(domain['id'],
                                                 domain_config_options)
@@ -391,12 +391,12 @@ class DomainConfigs(dict):
 
         latest_domain_config = (
             self.domain_config_api.
-            get_config_with_sensitive_info(domain_id))
+                get_config_with_sensitive_info(domain_id))
         domain_config_in_use = domain_id in self
 
         if latest_domain_config:
             if (not domain_config_in_use or
-                    latest_domain_config != self[domain_id]['cfg_overrides']):
+                        latest_domain_config != self[domain_id]['cfg_overrides']):
                 self._load_config_from_database(domain_id,
                                                 latest_domain_config)
         elif domain_config_in_use:
@@ -409,9 +409,9 @@ class DomainConfigs(dict):
                 # multi-threaded situation, two threads happen to be running
                 # in lock step.
                 pass
-        # If we fall into the else condition, this means there is no domain
-        # config set, and there is none in use either, so we have nothing
-        # to do.
+                # If we fall into the else condition, this means there is no domain
+                # config set, and there is none in use either, so we have nothing
+                # to do.
 
 
 def domains_configured(f):
@@ -424,6 +424,7 @@ def domains_configured(f):
     to each call, and if requires load them,
 
     """
+
     @functools.wraps(f)
     def wrapper(self, *args, **kwargs):
         if (not self.domain_configs.configured and
@@ -431,6 +432,7 @@ def domains_configured(f):
             self.domain_configs.setup_domain_drivers(
                 self.driver, self.resource_api)
         return f(self, *args, **kwargs)
+
     return wrapper
 
 
@@ -451,7 +453,9 @@ def exception_translated(exception_type):
                     raise AssertionError(_('Invalid user / password'))
                 else:
                     raise
+
         return wrapper
+
     return _exception_translated
 
 
@@ -591,7 +595,7 @@ class Manager(manager.Manager):
                 ref, domain_id, driver, entity_type, conf)
         elif isinstance(ref, list):
             return [self._set_domain_id_and_mapping(
-                    x, domain_id, driver, entity_type) for x in ref]
+                x, domain_id, driver, entity_type) for x in ref]
         else:
             raise ValueError(_('Expected dict or list: %s') % type(ref))
 
@@ -687,15 +691,15 @@ class Manager(manager.Manager):
         # that would happen is that the default driver is LDAP and the
         # domain is anything other than None or the default domain.
         if (not driver.is_domain_aware() and driver == self.driver and
-            domain_id != CONF.identity.default_domain_id and
-                domain_id is not None):
-                    LOG.warning(_LW('Found multiple domains being mapped to a '
-                                    'driver that does not support that (e.g. '
-                                    'LDAP) - Domain ID: %(domain)s, '
-                                    'Default Driver: %(driver)s'),
-                                {'domain': domain_id,
-                                 'driver': (driver == self.driver)})
-                    raise exception.DomainNotFound(domain_id=domain_id)
+                    domain_id != CONF.identity.default_domain_id and
+                    domain_id is not None):
+            LOG.warning(_LW('Found multiple domains being mapped to a '
+                            'driver that does not support that (e.g. '
+                            'LDAP) - Domain ID: %(domain)s, '
+                            'Default Driver: %(driver)s'),
+                        {'domain': domain_id,
+                         'driver': (driver == self.driver)})
+            raise exception.DomainNotFound(domain_id=domain_id)
         return driver
 
     def _get_domain_driver_and_entity_id(self, public_id):
@@ -791,7 +795,7 @@ class Manager(manager.Manager):
         if hints:
             for filter in hints.filters:
                 if (filter['name'] == 'domain_id' and
-                        filter['comparator'] == 'equals'):
+                            filter['comparator'] == 'equals'):
                     hints.filters.remove(filter)
 
     def _ensure_domain_id_in_hints(self, hints, domain_id):
@@ -1145,6 +1149,17 @@ class Manager(manager.Manager):
                                                 group_entity_id)
 
     @domains_configured
+    def get_user_history(self, user_id):
+        domain_id, driver, entity_id = (
+            self._get_domain_driver_and_entity_id(user_id))
+        return driver.get_user_history(user_id, CONF.password_policy.num_password_saved)
+
+    def update_user_history(self, user_id, original_password, count):
+        domain_id, driver, entity_id = (
+            self._get_domain_driver_and_entity_id(user_id))
+        driver.update_user_history(user_id, original_password, count)
+
+    @domains_configured
     def change_password(self, context, user_id, original_password,
                         new_password):
 
@@ -1152,7 +1167,12 @@ class Manager(manager.Manager):
         self.authenticate(context, user_id, original_password)
 
         update_dict = {'password': new_password}
+        expiry_days = CONF.password_policy.expiry_days
+        if expiry_days is not None:
+            update_dict['expiry'] = datetime.datetime.now() + datetime.timedelta(days=expiry_days)
+
         self.update_user(user_id, update_dict)
+        self.update_user_history(user_id, original_password, CONF.password_policy.num_password_saved)
 
 
 @six.add_metaclass(abc.ABCMeta)
@@ -1367,7 +1387,7 @@ class IdentityDriverV8(object):
         """
         raise exception.NotImplemented()  # pragma: no cover
 
-    # end of identity
+        # end of identity
 
 
 Driver = manager.create_legacy_driver(IdentityDriverV8)

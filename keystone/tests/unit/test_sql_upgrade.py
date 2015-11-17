@@ -99,6 +99,9 @@ INITIAL_TABLE_STRUCTURE = {
         'id', 'name', 'extra', 'password', 'enabled', 'domain_id',
         'default_project_id',
     ],
+    'user_history': [
+        'id', 'userid', 'password', 'date',
+    ],
     'user_group_membership': [
         'user_id', 'group_id',
     ],

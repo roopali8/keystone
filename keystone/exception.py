@@ -493,3 +493,6 @@ class TokenlessAuthConfigError(ValidationError):
     message_format = _('Could not determine Identity Provider ID. The '
                        'configuration option %(issuer_attribute)s '
                        'was not found in the request environment.')
+
+class PasswordExpired(ValidationError):
+    message_format = _('User password has expired.')

@@ -164,17 +164,18 @@ def upgrade(migrate_engine):
         sql.Column('enabled', sql.Boolean),
         sql.Column('domain_id', sql.String(length=64), nullable=False),
         sql.Column('default_project_id', sql.String(length=64)),
+        sql.Column('expiry', sql.DateTime),
         mysql_engine='InnoDB',
         mysql_charset='utf8')
 
     user_history = sql.Table(
         'user_history', meta,
-        sql.Column('id', sql.String(length=64)),
-        sql.Column('password', sql.String(length=128)),
-        sql.Column('date', sql.DateTime),
+        sql.Column('id', sql.Integer, nullable=False, primary_key=True, autoincrement=True),
+        sql.Column('userid', sql.String(length=64), nullable=False),
+        sql.Column('password', sql.String(length=128), nullable=False),
+        sql.Column('date', sql.DateTime, nullable=False),
         mysql_engine='InnoDB',
         mysql_charset='utf8')
-
 
     user_group_membership = sql.Table(
         'user_group_membership', meta,
@@ -238,6 +239,9 @@ def upgrade(migrate_engine):
                              name='ixu_project_name_domain_id').create()
     migrate.UniqueConstraint(domain.c.name,
                              name='ixu_domain_name').create()
+    migrate.UniqueConstraint(user_history.c.userid,
+                             user_history.c.password,
+                             name='ixu_userid_password_date').create()
 
     # Indexes
     sql.Index('ix_token_expires', token.c.expires).create()
@@ -269,7 +273,11 @@ def upgrade(migrate_engine):
          'name': 'fk_project_domain_id'},
 
         {'columns': [assignment.c.role_id],
-         'references': [role.c.id]}
+         'references': [role.c.id]},
+
+        {'columns': [user_history.c.userid],
+         'references': [user.c.id],
+         'name': 'fk_user_history_userid'}
     ]
 
     for fkey in fkeys:

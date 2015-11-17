@@ -24,6 +24,7 @@ import socket
 import sys
 import uuid
 import warnings
+import random
 
 import fixtures
 from oslo_config import cfg
@@ -42,6 +43,7 @@ from testtools import testcase
 # environment.use_eventlet must run before any of the code that will
 # call the eventlet monkeypatching.
 from keystone.common import environment  # noqa
+
 environment.use_eventlet()
 
 from keystone import auth
@@ -58,7 +60,6 @@ from keystone.policy.backends import rules
 from keystone.server import common
 from keystone import service
 from keystone.tests.unit import ksfixtures
-
 
 config.configure()
 
@@ -193,6 +194,7 @@ def skip_if_cache_disabled(*sections):
     keystone.common.cache that caching should be enabled.
 
     """
+
     def wrapper(f):
         @functools.wraps(f)
         def inner(*args, **kwargs):
@@ -204,18 +206,22 @@ def skip_if_cache_disabled(*sections):
                     if not getattr(conf_sec, 'caching', True):
                         raise testcase.TestSkipped('%s caching disabled.' % s)
             return f(*args, **kwargs)
+
         return inner
+
     return wrapper
 
 
 def skip_if_no_multiple_domains_support(f):
     """Decorator to skip tests for identity drivers limited to one domain."""
+
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
         test_obj = args[0]
         if not test_obj.identity_api.multiple_domains_supported:
             raise testcase.TestSkipped('No multiple domains support')
         return f(*args, **kwargs)
+
     return wrapper
 
 
@@ -272,11 +278,51 @@ def new_project_ref(domain_id=None, parent_id=None, is_domain=False):
     return ref
 
 
+def get_policy_password():
+    pw_min_len = CONF.password_policy.min_length
+    mypw = ""
+
+    u_case = CONF.password_policy.num_uppercase
+    if u_case > 0:
+        for i in range(u_case):
+            set = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+            next_index = random.randrange(len(set))
+            mypw += set[next_index]
+
+    l_case = CONF.password_policy.num_lowercase
+    if l_case > 0:
+        for i in range(l_case):
+            set = "abcdefghijklmnopqrstuvwxyz"
+            next_index = random.randrange(len(set))
+            mypw += set[next_index]
+
+    numeric = CONF.password_policy.num_numeric
+    if numeric > 0:
+        for i in range(numeric):
+            nums = "0123456789"
+            next_index = random.randrange(len(nums))
+            mypw += nums[next_index]
+
+    specialchar = CONF.password_policy.num_specialchars
+    if specialchar > 0:
+        for i in range(specialchar):
+            s_chars = "~!@#$%^&*()_+-=:';,./<>""?{}[]\|"
+            next_index = random.randrange(len(s_chars))
+            mypw += s_chars[next_index]
+
+    if len(mypw) < pw_min_len:
+        for x in range(len(mypw), pw_min_len):
+            alphabet = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+            next_index = random.randrange(len(alphabet))
+            mypw += alphabet[next_index]
+    return mypw
+
+
 def new_user_ref(domain_id, project_id=None):
     ref = new_ref()
     ref['domain_id'] = domain_id
     ref['email'] = uuid.uuid4().hex
-    ref['password'] = uuid.uuid4().hex
+    ref['password'] = get_policy_password()
     if project_id:
         ref['default_project_id'] = project_id
     return ref
@@ -380,6 +426,7 @@ class BaseTestCase(oslotest.BaseTestCase):
         :returns: a callable that uses a closure to delete instance attributes
 
         """
+
         def cleanup():
             for name in names:
                 # TODO(dstanek): remove this 'if' statement once
@@ -387,11 +434,11 @@ class BaseTestCase(oslotest.BaseTestCase):
                 # per test
                 if hasattr(self, name):
                     delattr(self, name)
+
         return cleanup
 
 
 class TestCase(BaseTestCase):
-
     def config_files(self):
         return []
 
@@ -472,6 +519,7 @@ class TestCase(BaseTestCase):
         # cleanup.
         def mocked_register_auth_plugin_opt(conf, opt):
             self.config_fixture.register_opt(opt, group='auth')
+
         self.useFixture(mockpatch.PatchObject(
             common_cfg, '_register_auth_plugin_opt',
             new=mocked_register_auth_plugin_opt))
@@ -559,7 +607,7 @@ class TestCase(BaseTestCase):
         # TODO(termie): doing something from json, probably based on Django's
         #               loaddata will be much preferred.
         if (hasattr(self, 'identity_api') and
-            hasattr(self, 'assignment_api') and
+                hasattr(self, 'assignment_api') and
                 hasattr(self, 'resource_api')):
             for domain in fixtures.DOMAINS:
                 try:
@@ -708,6 +756,7 @@ class TestCase(BaseTestCase):
 
 class SQLDriverOverrides(object):
     """A mixin for consolidating sql-specific test overrides."""
+
     def config_overrides(self):
         super(SQLDriverOverrides, self).config_overrides()
         # SQL specific driver overrides

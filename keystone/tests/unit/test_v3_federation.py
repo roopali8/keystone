@@ -815,7 +815,7 @@ class FederatedIdentityProviderTests(FederationTests):
         if body is None:
             body = self._http_idp_input()
         resp = self.put(url, body={'identity_provider': body},
-                        expected_status=201)
+                        expected_status=http_client.CREATED)
         return resp
 
     def _http_idp_input(self, **kwargs):
@@ -1027,7 +1027,7 @@ class FederatedIdentityProviderTests(FederationTests):
         url = self.base_url(suffix=uuid.uuid4().hex)
         body = self._http_idp_input()
         self.put(url, body={'identity_provider': body},
-                 expected_status=201)
+                 expected_status=http_client.CREATED)
         self.put(url, body={'identity_provider': body},
                  expected_status=http_client.CONFLICT)
 
@@ -1084,7 +1084,7 @@ class FederatedIdentityProviderTests(FederationTests):
         idp_url = self.base_url(suffix=idp_id)
 
         # assign protocol to IdP
-        kwargs = {'expected_status': 201}
+        kwargs = {'expected_status': http_client.CREATED}
         resp, idp_id, proto = self._assign_protocol_to_idp(
             url=url,
             idp_id=idp_id,
@@ -1179,7 +1179,7 @@ class FederatedIdentityProviderTests(FederationTests):
     def test_assign_protocol_to_idp(self):
         """Assign a protocol to existing IdP."""
 
-        self._assign_protocol_to_idp(expected_status=201)
+        self._assign_protocol_to_idp(expected_status=http_client.CREATED)
 
     def test_protocol_composite_pk(self):
         """Test whether Keystone let's add two entities with identical
@@ -1193,7 +1193,7 @@ class FederatedIdentityProviderTests(FederationTests):
         """
         url = self.base_url(suffix='%(idp_id)s/protocols/%(protocol_id)s')
 
-        kwargs = {'expected_status': 201}
+        kwargs = {'expected_status': http_client.CREATED}
         self._assign_protocol_to_idp(proto='saml2',
                                      url=url, **kwargs)
 
@@ -1209,7 +1209,7 @@ class FederatedIdentityProviderTests(FederationTests):
         """
         url = self.base_url(suffix='%(idp_id)s/protocols/%(protocol_id)s')
 
-        kwargs = {'expected_status': 201}
+        kwargs = {'expected_status': http_client.CREATED}
         resp, idp_id, proto = self._assign_protocol_to_idp(proto='saml2',
                                                            url=url, **kwargs)
         kwargs = {'expected_status': http_client.CONFLICT}
@@ -1235,7 +1235,8 @@ class FederatedIdentityProviderTests(FederationTests):
     def test_get_protocol(self):
         """Create and later fetch protocol tied to IdP."""
 
-        resp, idp_id, proto = self._assign_protocol_to_idp(expected_status=201)
+        resp, idp_id, proto = self._assign_protocol_to_idp(
+            expected_status=http_client.CREATED)
         proto_id = self._fetch_attribute_from_response(resp, 'protocol')['id']
         url = "%s/protocols/%s" % (idp_id, proto_id)
         url = self.base_url(suffix=url)
@@ -1254,12 +1255,14 @@ class FederatedIdentityProviderTests(FederationTests):
         Compare input and output id sets.
 
         """
-        resp, idp_id, proto = self._assign_protocol_to_idp(expected_status=201)
+        resp, idp_id, proto = self._assign_protocol_to_idp(
+            expected_status=http_client.CREATED)
         iterations = random.randint(0, 16)
         protocol_ids = []
         for _ in range(iterations):
-            resp, _, proto = self._assign_protocol_to_idp(idp_id=idp_id,
-                                                          expected_status=201)
+            resp, _, proto = self._assign_protocol_to_idp(
+                idp_id=idp_id,
+                expected_status=http_client.CREATED)
             proto_id = self._fetch_attribute_from_response(resp, 'protocol')
             proto_id = proto_id['id']
             protocol_ids.append(proto_id)
@@ -1278,7 +1281,8 @@ class FederatedIdentityProviderTests(FederationTests):
     def test_update_protocols_attribute(self):
         """Update protocol's attribute."""
 
-        resp, idp_id, proto = self._assign_protocol_to_idp(expected_status=201)
+        resp, idp_id, proto = self._assign_protocol_to_idp(
+            expected_status=http_client.CREATED)
         new_mapping_id = uuid.uuid4().hex
 
         url = "%s/protocols/%s" % (idp_id, proto)
@@ -1299,7 +1303,8 @@ class FederatedIdentityProviderTests(FederationTests):
         """
         url = self.base_url(suffix='/%(idp_id)s/'
                                    'protocols/%(protocol_id)s')
-        resp, idp_id, proto = self._assign_protocol_to_idp(expected_status=201)
+        resp, idp_id, proto = self._assign_protocol_to_idp(
+            expected_status=http_client.CREATED)
         url = url % {'idp_id': idp_id,
                      'protocol_id': proto}
         self.delete(url)
@@ -1340,7 +1345,7 @@ class MappingCRUDTests(FederationTests):
         url = self.MAPPING_URL + uuid.uuid4().hex
         resp = self.put(url,
                         body={'mapping': mapping_fixtures.MAPPING_LARGE},
-                        expected_status=201)
+                        expected_status=http_client.CREATED)
         return resp
 
     def _get_id_from_response(self, resp):
@@ -1357,7 +1362,7 @@ class MappingCRUDTests(FederationTests):
         resp = self.get(url)
         entities = resp.result.get('mappings')
         self.assertIsNotNone(entities)
-        self.assertResponseStatus(resp, 200)
+        self.assertResponseStatus(resp, http_client.OK)
         self.assertValidListLinks(resp.result.get('links'))
         self.assertEqual(1, len(entities))
 
@@ -1367,7 +1372,7 @@ class MappingCRUDTests(FederationTests):
         mapping_id = self._get_id_from_response(resp)
         url = url % {'mapping_id': str(mapping_id)}
         resp = self.delete(url)
-        self.assertResponseStatus(resp, 204)
+        self.assertResponseStatus(resp, http_client.NO_CONTENT)
         self.get(url, expected_status=http_client.NOT_FOUND)
 
     def test_mapping_get(self):
@@ -1649,13 +1654,13 @@ class FederatedTokenTests(FederationTests, FederatedSetupMixin):
         self.assertIsNotNone(r.headers.get('X-Subject-Token'))
 
     def test_scope_to_project_once_notify(self):
-        r = self.v3_authenticate_token(
+        r = self.v3_create_token(
             self.TOKEN_SCOPE_PROJECT_EMPLOYEE_FROM_EMPLOYEE)
         user_id = r.json['token']['user']['id']
         self._assert_last_notify(self.ACTION, self.IDP, self.PROTOCOL, user_id)
 
     def test_scope_to_project_once(self):
-        r = self.v3_authenticate_token(
+        r = self.v3_create_token(
             self.TOKEN_SCOPE_PROJECT_EMPLOYEE_FROM_EMPLOYEE)
         token_resp = r.result['token']
         project_id = token_resp['project']['id']
@@ -1685,14 +1690,14 @@ class FederatedTokenTests(FederationTests, FederatedSetupMixin):
         """
         enabled_false = {'enabled': False}
         self.federation_api.update_idp(self.IDP, enabled_false)
-        self.v3_authenticate_token(
+        self.v3_create_token(
             self.TOKEN_SCOPE_PROJECT_EMPLOYEE_FROM_CUSTOMER,
             expected_status=http_client.FORBIDDEN)
 
     def test_scope_to_bad_project(self):
         """Scope unscoped token with a project we don't have access to."""
 
-        self.v3_authenticate_token(
+        self.v3_create_token(
             self.TOKEN_SCOPE_PROJECT_EMPLOYEE_FROM_CUSTOMER,
             expected_status=http_client.UNAUTHORIZED)
 
@@ -1711,7 +1716,7 @@ class FederatedTokenTests(FederationTests, FederatedSetupMixin):
         project_ids = (self.proj_employees['id'],
                        self.proj_customers['id'])
         for body, project_id_ref in zip(bodies, project_ids):
-            r = self.v3_authenticate_token(body)
+            r = self.v3_create_token(body)
             token_resp = r.result['token']
             self._check_project_scoped_token_attributes(token_resp,
                                                         project_id_ref)
@@ -1719,7 +1724,7 @@ class FederatedTokenTests(FederationTests, FederatedSetupMixin):
     def test_scope_to_project_with_only_inherited_roles(self):
         """Try to scope token whose only roles are inherited."""
         self.config_fixture.config(group='os_inherit', enabled=True)
-        r = self.v3_authenticate_token(
+        r = self.v3_create_token(
             self.TOKEN_SCOPE_PROJECT_INHERITED_FROM_CUSTOMER)
         token_resp = r.result['token']
         self._check_project_scoped_token_attributes(
@@ -1731,7 +1736,7 @@ class FederatedTokenTests(FederationTests, FederatedSetupMixin):
 
     def test_scope_token_from_nonexistent_unscoped_token(self):
         """Try to scope token from non-existent unscoped token."""
-        self.v3_authenticate_token(
+        self.v3_create_token(
             self.TOKEN_SCOPE_PROJECT_FROM_NONEXISTENT_TOKEN,
             expected_status=http_client.NOT_FOUND)
 
@@ -1755,7 +1760,7 @@ class FederatedTokenTests(FederationTests, FederatedSetupMixin):
                           assertion='CONTRACTOR_ASSERTION')
 
     def test_scope_to_domain_once(self):
-        r = self.v3_authenticate_token(self.TOKEN_SCOPE_DOMAIN_A_FROM_CUSTOMER)
+        r = self.v3_create_token(self.TOKEN_SCOPE_DOMAIN_A_FROM_CUSTOMER)
         token_resp = r.result['token']
         self._check_domain_scoped_token_attributes(token_resp,
                                                    self.domainA['id'])
@@ -1778,14 +1783,14 @@ class FederatedTokenTests(FederationTests, FederatedSetupMixin):
                       self.domainC['id'])
 
         for body, domain_id_ref in zip(bodies, domain_ids):
-            r = self.v3_authenticate_token(body)
+            r = self.v3_create_token(body)
             token_resp = r.result['token']
             self._check_domain_scoped_token_attributes(token_resp,
                                                        domain_id_ref)
 
     def test_scope_to_domain_with_only_inherited_roles_fails(self):
         """Try to scope to a domain that has no direct roles."""
-        self.v3_authenticate_token(
+        self.v3_create_token(
             self.TOKEN_SCOPE_DOMAIN_D_FROM_CUSTOMER,
             expected_status=http_client.UNAUTHORIZED)
 
@@ -1899,7 +1904,7 @@ class FederatedTokenTests(FederationTests, FederatedSetupMixin):
         v3_scope_request = self._scope_request(employee_unscoped_token_id,
                                                'project', project['id'])
 
-        r = self.v3_authenticate_token(v3_scope_request)
+        r = self.v3_create_token(v3_scope_request)
         token_resp = r.result['token']
         self._check_project_scoped_token_attributes(token_resp, project['id'])
 
@@ -1971,7 +1976,8 @@ class FederatedTokenTests(FederationTests, FederatedSetupMixin):
             token_id, 'project',
             self.project_all['id'])
 
-        self.v3_authenticate_token(scoped_token, expected_status=500)
+        self.v3_create_token(
+            scoped_token, expected_status=http_client.INTERNAL_SERVER_ERROR)
 
     def test_lists_with_missing_group_in_backend(self):
         """Test a mapping that points to a group that does not exist
@@ -2362,7 +2368,7 @@ class FederatedTokenTests(FederationTests, FederatedSetupMixin):
         self._check_domains_are_valid(r.json_body['token'])
 
     def test_scoped_token_has_user_domain(self):
-        r = self.v3_authenticate_token(
+        r = self.v3_create_token(
             self.TOKEN_SCOPE_PROJECT_EMPLOYEE_FROM_EMPLOYEE)
         self._check_domains_are_valid(r.result['token'])
 
@@ -2436,7 +2442,7 @@ class FernetFederatedTokenTests(FederationTests, FederatedSetupMixin):
         v3_scope_request = self._scope_request(unscoped_token,
                                                'project', project['id'])
 
-        resp = self.v3_authenticate_token(v3_scope_request)
+        resp = self.v3_create_token(v3_scope_request)
         token_resp = resp.result['token']
         self._check_project_scoped_token_attributes(token_resp, project['id'])
 
@@ -2523,7 +2529,7 @@ class SAMLGenerationTests(FederationTests):
         self.sp = self.sp_ref()
         url = '/OS-FEDERATION/service_providers/' + self.SERVICE_PROVDIER_ID
         self.put(url, body={'service_provider': self.sp},
-                 expected_status=201)
+                 expected_status=http_client.CREATED)
 
     def test_samlize_token_values(self):
         """Test the SAML generator produces a SAML object.
@@ -2709,7 +2715,7 @@ class SAMLGenerationTests(FederationTests):
             user_id=self.user['id'],
             password=self.user['password'],
             project_id=self.project['id'])
-        resp = self.v3_authenticate_token(auth_data)
+        resp = self.v3_create_token(auth_data)
         token_id = resp.headers.get('X-Subject-Token')
         return token_id
 
@@ -2718,7 +2724,7 @@ class SAMLGenerationTests(FederationTests):
             user_id=self.user['id'],
             password=self.user['password'],
             user_domain_id=self.domain['id'])
-        resp = self.v3_authenticate_token(auth_data)
+        resp = self.v3_create_token(auth_data)
         token_id = resp.headers.get('X-Subject-Token')
         return token_id
 
@@ -2757,7 +2763,7 @@ class SAMLGenerationTests(FederationTests):
                                return_value=self.signed_assertion):
             http_response = self.post(self.SAML_GENERATION_ROUTE, body=body,
                                       response_content_type='text/xml',
-                                      expected_status=200)
+                                      expected_status=http_client.OK)
 
         response = etree.fromstring(http_response.result)
         issuer = response[0]
@@ -2873,7 +2879,7 @@ class SAMLGenerationTests(FederationTests):
                                return_value=self.signed_assertion):
             http_response = self.post(self.ECP_GENERATION_ROUTE, body=body,
                                       response_content_type='text/xml',
-                                      expected_status=200)
+                                      expected_status=http_client.OK)
 
         env_response = etree.fromstring(http_response.result)
         header = env_response[0]
@@ -3073,13 +3079,13 @@ class IdPMetadataGenerationTests(FederationTests):
                           self.generator.generate_metadata)
 
     def test_get_metadata_with_no_metadata_file_configured(self):
-        self.get(self.METADATA_URL, expected_status=500)
+        self.get(self.METADATA_URL,
+                 expected_status=http_client.INTERNAL_SERVER_ERROR)
 
     def test_get_metadata(self):
         self.config_fixture.config(
             group='saml', idp_metadata_path=XMLDIR + '/idp_saml2_metadata.xml')
-        r = self.get(self.METADATA_URL, response_content_type='text/xml',
-                     expected_status=200)
+        r = self.get(self.METADATA_URL, response_content_type='text/xml')
         self.assertEqual('text/xml', r.headers.get('Content-Type'))
 
         reference_file = _load_xml('idp_saml2_metadata.xml')
@@ -3102,7 +3108,7 @@ class ServiceProviderTests(FederationTests):
         self.SP_REF = self.sp_ref()
         self.SERVICE_PROVIDER = self.put(
             url, body={'service_provider': self.SP_REF},
-            expected_status=201).result
+            expected_status=http_client.CREATED).result
 
     def sp_ref(self):
         ref = {
@@ -3121,7 +3127,7 @@ class ServiceProviderTests(FederationTests):
 
     def test_get_service_provider(self):
         url = self.base_url(suffix=self.SERVICE_PROVIDER_ID)
-        resp = self.get(url, expected_status=200)
+        resp = self.get(url)
         self.assertValidEntity(resp.result['service_provider'],
                                keys_to_check=self.SP_KEYS)
 
@@ -3133,7 +3139,7 @@ class ServiceProviderTests(FederationTests):
         url = self.base_url(suffix=uuid.uuid4().hex)
         sp = self.sp_ref()
         resp = self.put(url, body={'service_provider': sp},
-                        expected_status=201)
+                        expected_status=http_client.CREATED)
         self.assertValidEntity(resp.result['service_provider'],
                                keys_to_check=self.SP_KEYS)
 
@@ -3143,7 +3149,7 @@ class ServiceProviderTests(FederationTests):
         sp = self.sp_ref()
         del sp['relay_state_prefix']
         resp = self.put(url, body={'service_provider': sp},
-                        expected_status=201)
+                        expected_status=http_client.CREATED)
         sp_result = resp.result['service_provider']
         self.assertEqual(CONF.saml.relay_state_prefix,
                          sp_result['relay_state_prefix'])
@@ -3155,7 +3161,7 @@ class ServiceProviderTests(FederationTests):
         non_default_prefix = uuid.uuid4().hex
         sp['relay_state_prefix'] = non_default_prefix
         resp = self.put(url, body={'service_provider': sp},
-                        expected_status=201)
+                        expected_status=http_client.CREATED)
         sp_result = resp.result['service_provider']
         self.assertEqual(non_default_prefix,
                          sp_result['relay_state_prefix'])
@@ -3182,7 +3188,8 @@ class ServiceProviderTests(FederationTests):
         }
         for id, sp in ref_service_providers.items():
             url = self.base_url(suffix=id)
-            self.put(url, body={'service_provider': sp}, expected_status=201)
+            self.put(url, body={'service_provider': sp},
+                     expected_status=http_client.CREATED)
 
         # Insert ids into service provider object, we will compare it with
         # responses from server and those include 'id' attribute.
@@ -3209,15 +3216,14 @@ class ServiceProviderTests(FederationTests):
         """
         new_sp_ref = self.sp_ref()
         url = self.base_url(suffix=self.SERVICE_PROVIDER_ID)
-        resp = self.patch(url, body={'service_provider': new_sp_ref},
-                          expected_status=200)
+        resp = self.patch(url, body={'service_provider': new_sp_ref})
         patch_result = resp.result
         new_sp_ref['id'] = self.SERVICE_PROVIDER_ID
         self.assertValidEntity(patch_result['service_provider'],
                                ref=new_sp_ref,
                                keys_to_check=self.SP_KEYS)
 
-        resp = self.get(url, expected_status=200)
+        resp = self.get(url)
         get_result = resp.result
 
         self.assertDictEqual(patch_result['service_provider'],
@@ -3255,15 +3261,14 @@ class ServiceProviderTests(FederationTests):
         non_default_prefix = uuid.uuid4().hex
         new_sp_ref['relay_state_prefix'] = non_default_prefix
         url = self.base_url(suffix=self.SERVICE_PROVIDER_ID)
-        resp = self.patch(url, body={'service_provider': new_sp_ref},
-                          expected_status=200)
+        resp = self.patch(url, body={'service_provider': new_sp_ref})
         sp_result = resp.result['service_provider']
         self.assertEqual(non_default_prefix,
                          sp_result['relay_state_prefix'])
 
     def test_delete_service_provider(self):
         url = self.base_url(suffix=self.SERVICE_PROVIDER_ID)
-        self.delete(url, expected_status=204)
+        self.delete(url)
 
     def test_delete_service_provider_404(self):
         url = self.base_url(suffix=uuid.uuid4().hex)
@@ -3429,7 +3434,7 @@ class K2KServiceCatalogTests(FederationTests):
         for entity in service_providers:
             id = entity.get('id')
             ref_entity = self.sp_response(id, ref.get(id))
-            self.assertDictEqual(ref_entity, entity)
+            self.assertDictEqual(entity, ref_entity)
 
     def test_service_providers_in_token(self):
         """Check if service providers are listed in service catalog."""

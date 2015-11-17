@@ -20,11 +20,12 @@ from oslo_log import log
 from keystone.common import controller
 from keystone.common import dependency
 from keystone.common import validation
+from keystone.common import utils
 from keystone import exception
 from keystone.i18n import _, _LW
 from keystone.identity import schema
 from keystone import notifications
-
+import datetime
 
 CONF = cfg.CONF
 LOG = log.getLogger(__name__)
@@ -32,7 +33,6 @@ LOG = log.getLogger(__name__)
 
 @dependency.requires('assignment_api', 'identity_api', 'resource_api')
 class User(controller.V2Controller):
-
     @controller.v2_deprecated
     def get_user(self, context, user_id):
         self.assert_admin(context)
@@ -112,10 +112,10 @@ class User(controller.V2Controller):
         # where a user previously had no tenant but a tenant is now being
         # added for the user.
         if (('tenantId' in old_user_ref and
-                old_user_ref['tenantId'] != default_project_id and
-                default_project_id is not None) or
-            ('tenantId' not in old_user_ref and
-                default_project_id is not None)):
+                     old_user_ref['tenantId'] != default_project_id and
+                     default_project_id is not None) or
+                ('tenantId' not in old_user_ref and
+                         default_project_id is not None)):
             # Make sure the new project actually exists before we perform the
             # user update.
             self.resource_api.get_project(default_project_id)
@@ -206,13 +206,44 @@ class UserV3(controller.V3Controller):
         ref['group'] = self.identity_api.get_group(group_id)
         self.check_protection(context, prep_info, ref)
 
+    # rrawat: Function to check password policy. Policy configuration in config.py
+    def checkPasswordPolicy(self, password):
+        num_uppercase = CONF.password_policy.num_uppercase
+        num_lowercase = CONF.password_policy.num_lowercase
+        num_specialchars = CONF.password_policy.num_specialchars
+        num_numeric = CONF.password_policy.num_numeric
+        min_length = CONF.password_policy.min_length
+        max_length = CONF.password_policy.max_length
+        if (min_length != -1) and (len(password) < min_length):
+            return False
+        if (max_length != -1) and (len(password) > max_length):
+            return False
+        if (num_lowercase != -1) and (sum(1 for c in password if c.islower()) < num_lowercase):
+            return False
+        if (num_uppercase != -1) and (sum(1 for c in password if c.isupper()) < num_uppercase):
+            return False
+        if (num_numeric != -1) and (sum(1 for c in password if c.isdigit()) < num_numeric):
+            return False
+        if (num_specialchars != -1) and (sum(1 for c in password if not c.isalnum()) < num_specialchars):
+            return False
+
+        return True
+
     @controller.protected()
     @validation.validated(schema.user_create, 'user')
     def create_user(self, context, user):
         # The manager layer will generate the unique ID for users
+        expiry_days = CONF.password_policy.expiry_days
+        user['expiry'] = datetime.datetime.now() + datetime.timedelta(days=expiry_days)
         ref = self._normalize_dict(user)
         ref = self._normalize_domain_id(context, ref)
         initiator = notifications._get_request_audit_info(context)
+        password = user.get('password')
+        if password is not None:
+            if not self.checkPasswordPolicy(password):
+                raise exception.ValidationError(target='user',
+                                                attribute='password',
+                                               message='password does not validate password policy')
         ref = self.identity_api.create_user(ref, initiator)
         return UserV3.wrap_member(context, ref)
 
@@ -265,6 +296,15 @@ class UserV3(controller.V3Controller):
         initiator = notifications._get_request_audit_info(context)
         return self.identity_api.delete_user(user_id, initiator)
 
+    def match_previous_passwords(self, user_id, password):
+        user_history = self.identity_api.get_user_history(user_id)
+        if user_history:
+            for x in user_history:
+                if utils.check_password(password=password, hashed=x.password):
+                    return True
+
+        return False
+
     @controller.protected()
     def change_password(self, context, user_id, user):
         original_password = user.get('original_password')
@@ -276,6 +316,19 @@ class UserV3(controller.V3Controller):
         if password is None:
             raise exception.ValidationError(target='user',
                                             attribute='password')
+        if not self.checkPasswordPolicy(password):
+            raise exception.ValidationError(target='user',
+                                            attribute='password',
+                                            message='password is not in correct format.')
+        if original_password == password:
+            raise exception.ValidationError(target='user',
+                                            attribute='password',
+                                            message='Cannot use same password.')
+        if self.match_previous_passwords(user_id, password):
+            raise exception.ValidationError(target='user',
+                                            attribute='password',
+                                            message='Cannot use old passwords')
+
         try:
             self.identity_api.change_password(
                 context, user_id, original_password, password)

@@ -19,7 +19,7 @@ from keystone.common import utils
 from keystone import exception
 from keystone.i18n import _
 from keystone import identity
-
+import datetime;
 
 CONF = cfg.CONF
 
@@ -27,7 +27,7 @@ CONF = cfg.CONF
 class User(sql.ModelBase, sql.DictBase):
     __tablename__ = 'user'
     attributes = ['id', 'name', 'domain_id', 'password', 'enabled',
-                  'default_project_id']
+                  'default_project_id', 'expiry']
     id = sql.Column(sql.String(64), primary_key=True)
     name = sql.Column(sql.String(255), nullable=False)
     domain_id = sql.Column(sql.String(64), nullable=False)
@@ -35,6 +35,7 @@ class User(sql.ModelBase, sql.DictBase):
     enabled = sql.Column(sql.Boolean)
     extra = sql.Column(sql.JsonBlob())
     default_project_id = sql.Column(sql.String(64))
+    expiry = sql.Column(sql.DateTime)
     # Unique constraint across two columns to create the separation
     # rather than just only 'name' being unique
     __table_args__ = (sql.UniqueConstraint('domain_id', 'name'), {})
@@ -45,12 +46,23 @@ class User(sql.ModelBase, sql.DictBase):
             del d['default_project_id']
         return d
 
+
 class UserHistory(sql.ModelBase, sql.DictBase):
     __tablename__ = 'user_history'
-    attributes = ['id',  'password', 'date']
-    id = sql.Column(sql.String(64), primary_key=True)
-    password = sql.Column(sql.String(128))
-    date = sql.Column(sql.DateTime, default=None)
+    attributes = ['id', 'userid', 'password', 'date']
+    id = sql.Column(sql.Integer,
+                    primary_key=True,
+                    nullable=False,
+                    autoincrement=True)
+    userid = sql.Column(sql.String(64),
+                        sql.ForeignKey('user.id'),
+                        nullable=False)
+    password = sql.Column(sql.String(128),
+                          nullable=False)
+    date = sql.Column(sql.DateTime,
+                      nullable=False)
+
+    __table_args__ = (sql.UniqueConstraint('userid', 'password'), {})
 
 
 class Group(sql.ModelBase, sql.DictBase):
@@ -109,8 +121,12 @@ class Identity(identity.IdentityDriverV8):
             user_ref = self._get_user(session, user_id)
         except exception.UserNotFound:
             raise AssertionError(_('Invalid user / password'))
+
         if not self._check_password(password, user_ref):
             raise AssertionError(_('Invalid user / password'))
+        if user_ref.expiry is not None:
+            if user_ref.expiry <= datetime.datetime.now():
+                raise exception.PasswordExpired(_('Password Expired'))
         return identity.filter_user(user_ref.to_dict())
 
     # user crud
@@ -168,6 +184,51 @@ class Identity(identity.IdentityDriverV8):
                     setattr(user_ref, attr, getattr(new_user, attr))
             user_ref.extra = new_user.extra
         return identity.filter_user(user_ref.to_dict(include_extra_dict=True))
+
+    def _get_user_history(self, session, user_id, count=0):
+        query = session.query(UserHistory)
+        query = query.filter_by(userid=user_id).order_by(UserHistory.date.desc())
+        if count is not None and count is not 0:
+            query = query.limit(count)
+        try:
+            user_refs = query.all()
+        except sql.NotFound:
+            raise exception.UserNotFound(userid=user_id)
+        if not user_refs:
+            return None
+        return user_refs
+
+    def get_user_history(self, user_id, count):
+        session = sql.get_session()
+        user_history = self._get_user_history(session, user_id, count)
+        if user_history is not None:
+            return user_history
+        else:
+            return None
+
+    @sql.handle_conflicts(conflict_type='user_history')
+    def update_user_history(self, user_id, original_password, count):
+        session = sql.get_session()
+        with session.begin():
+            user_history_refs = self._get_user_history(session, user_id)
+            if user_history_refs:
+                h_user_cnt = len(user_history_refs)
+                if h_user_cnt is not 0 and h_user_cnt >= count:
+                    user = user_history_refs[h_user_cnt - 1]
+                    setattr(user, 'password', utils.hash_password(original_password))
+                    setattr(user, 'date', datetime.datetime.now())
+                    session.query(UserHistory).filter(UserHistory.id == user.id).update(user, synchronize_session=False)
+                    if h_user_cnt > count:
+                        ## deleting the redundant user history
+                        uids = []
+                        for x in range(count, h_user_cnt):
+                            uids.append(user_history_refs[x].id)
+                        if uids and len(uids) > 0:
+                            session.query(UserHistory).filter(UserHistory.id.in_(uids)).delete(synchronize_session=False)
+            else:
+                session.add(UserHistory(userid=user_id,
+                                            password=utils.hash_password(original_password),
+                                            date=datetime.datetime.now()))
 
     def add_user_to_group(self, user_id, group_id):
         session = sql.get_session()
@@ -241,6 +302,10 @@ class Identity(identity.IdentityDriverV8):
 
             q = session.query(UserGroupMembership)
             q = q.filter_by(user_id=user_id)
+            q.delete(False)
+
+            q = session.query(UserHistory)
+            q = q.filter_by(userid=user_id)
             q.delete(False)
 
             session.delete(ref)

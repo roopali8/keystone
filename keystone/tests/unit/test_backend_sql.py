@@ -35,13 +35,11 @@ from keystone.tests.unit.ksfixtures import database
 from keystone.tests.unit import test_backend
 from keystone.token.persistence.backends import sql as token_sql
 
-
 CONF = cfg.CONF
 DEFAULT_DOMAIN_ID = CONF.identity.default_domain_id
 
 
 class SqlTests(unit.SQLDriverOverrides, unit.TestCase):
-
     def setUp(self):
         super(SqlTests, self).setUp()
         self.useFixture(database.Database())
@@ -59,7 +57,6 @@ class SqlTests(unit.SQLDriverOverrides, unit.TestCase):
 
 
 class SqlModels(SqlTests):
-
     def select_table(self, name):
         table = sqlalchemy.Table(name,
                                  sql.ModelBase.metadata,
@@ -109,7 +106,7 @@ class SqlModels(SqlTests):
                     default = column._proxies[0].default.arg
                 actual_schema.append((column.name, type(column.type), default))
             elif (hasattr(column.type, 'length') and
-                    not isinstance(column.type, sql.Enum)):
+                      not isinstance(column.type, sql.Enum)):
                 # NOTE(dstanek): Even though sql.Enum columns have a length
                 # set we don't want to catch them here. Maybe in the future
                 # we'll check to see that they contain a list of the correct
@@ -129,8 +126,16 @@ class SqlModels(SqlTests):
                 ('domain_id', sql.String, 64),
                 ('default_project_id', sql.String, 64),
                 ('enabled', sql.Boolean, None),
-                ('extra', sql.JsonBlob, None))
+                ('extra', sql.JsonBlob, None),
+                ('expiry', sql.DateTime, None))
         self.assertExpectedSchema('user', cols)
+
+    def test_user_history(self):
+        cols = (('id', sql.Integer, None),
+                ('userid', sql.String, 64),
+                ('password', sql.String, 128),
+                ('date', sql.DateTime, None))
+        self.assertExpectedSchema('user_history', cols)
 
     def test_group_model(self):
         cols = (('id', sql.String, 64),
@@ -176,7 +181,7 @@ class SqlIdentity(SqlTests, test_backend.IdentityTests):
     def test_password_hashed(self):
         session = sql.get_session()
         user_ref = self.identity_api._get_user(session, self.user_foo['id'])
-        self.assertNotEqual(user_ref['password'], self.user_foo['password'])
+        self.assertNotEqual(self.user_foo['password'], user_ref['password'])
 
     def test_delete_user_with_project_association(self):
         user = {'name': uuid.uuid4().hex,
@@ -550,12 +555,12 @@ class SqlToken(SqlTests, test_backend.TokenTests):
             if i == 0:
                 # The first time the batch iterator returns, it should return
                 # the first result that comes back from the database.
-                self.assertEqual(x, 'test')
+                self.assertEqual('test', x)
             elif i == 1:
                 # The second time, the database range function should return
                 # nothing, so the batch iterator returns the result of the
                 # upper_bound function
-                self.assertEqual(x, "final value")
+                self.assertEqual("final value", x)
             else:
                 self.fail("range batch function returned more than twice")
 
@@ -568,19 +573,18 @@ class SqlToken(SqlTests, test_backend.TokenTests):
         tok = token_sql.Token()
         db2_strategy = tok._expiry_range_strategy('ibm_db_sa')
         self.assertIsInstance(db2_strategy, functools.partial)
-        self.assertEqual(db2_strategy.func, token_sql._expiry_range_batched)
-        self.assertEqual(db2_strategy.keywords, {'batch_size': 100})
+        self.assertEqual(token_sql._expiry_range_batched, db2_strategy.func)
+        self.assertEqual({'batch_size': 100}, db2_strategy.keywords)
 
     def test_expiry_range_strategy_mysql(self):
         tok = token_sql.Token()
         mysql_strategy = tok._expiry_range_strategy('mysql')
         self.assertIsInstance(mysql_strategy, functools.partial)
-        self.assertEqual(mysql_strategy.func, token_sql._expiry_range_batched)
-        self.assertEqual(mysql_strategy.keywords, {'batch_size': 1000})
+        self.assertEqual(token_sql._expiry_range_batched, mysql_strategy.func)
+        self.assertEqual({'batch_size': 1000}, mysql_strategy.keywords)
 
 
 class SqlCatalog(SqlTests, test_backend.CatalogTests):
-
     _legacy_endpoint_id_in_endpoint = True
     _enabled_default_to_true_when_creating_endpoint = True
 
@@ -742,7 +746,6 @@ class SqlTokenCacheInvalidation(SqlTests, test_backend.TokenCacheInvalidation):
 
 
 class SqlFilterTests(SqlTests, test_backend.FilterTests):
-
     def _get_user_name_field_size(self):
         return identity_sql.User.name.type.length
 
@@ -841,7 +844,6 @@ class FakeTable(sql.ModelBase):
 
 
 class SqlDecorators(unit.TestCase):
-
     def test_initialization_fail(self):
         self.assertRaises(exception.StringLengthExceeded,
                           FakeTable, col='a' * 64)
@@ -864,7 +866,6 @@ class SqlDecorators(unit.TestCase):
 
 
 class SqlModuleInitialization(unit.TestCase):
-
     @mock.patch.object(sql.core, 'CONF')
     @mock.patch.object(options, 'set_defaults')
     def test_initialize_module(self, set_defaults, CONF):
@@ -874,7 +875,6 @@ class SqlModuleInitialization(unit.TestCase):
 
 
 class SqlCredential(SqlTests):
-
     def _create_credential_with_user_id(self, user_id=uuid.uuid4().hex):
         credential_id = uuid.uuid4().hex
         new_credential = {
@@ -890,7 +890,7 @@ class SqlCredential(SqlTests):
 
     def _validateCredentialList(self, retrieved_credentials,
                                 expected_credentials):
-        self.assertEqual(len(retrieved_credentials), len(expected_credentials))
+        self.assertEqual(len(expected_credentials), len(retrieved_credentials))
         retrived_ids = [c['id'] for c in retrieved_credentials]
         for cred in expected_credentials:
             self.assertIn(cred['id'], retrived_ids)

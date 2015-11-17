@@ -124,7 +124,7 @@ class CredentialTestCase(CredentialBaseTestCase):
 
         self.assertValidCredentialListResponse(r_ec2, ref=ec2_resp)
         self.assertEqual('ec2', cred_ec2['type'])
-        self.assertEqual(cred_ec2['id'], ec2_credential['id'])
+        self.assertEqual(ec2_credential['id'], cred_ec2['id'])
 
     def test_list_credentials_filtered_by_type_and_user_id(self):
         """Call ``GET  /credentials?user_id={user_id}&type={type}``."""
@@ -200,8 +200,8 @@ class CredentialTestCase(CredentialBaseTestCase):
         self.assertValidCredentialResponse(r, ref)
         # Assert credential id is same as hash of access key id for
         # ec2 credentials
-        self.assertEqual(r.result['credential']['id'],
-                         hashlib.sha256(blob['access']).hexdigest())
+        self.assertEqual(hashlib.sha256(blob['access']).hexdigest(),
+                         r.result['credential']['id'])
         # Create second ec2 credential with the same access key id and check
         # for conflict.
         self.post(
@@ -241,8 +241,8 @@ class CredentialTestCase(CredentialBaseTestCase):
         self.assertValidCredentialResponse(r, ref)
         # Assert credential id is not same as hash of access key id for
         # non-ec2 credentials
-        self.assertNotEqual(r.result['credential']['id'],
-                            hashlib.sha256(blob['access']).hexdigest())
+        self.assertNotEqual(hashlib.sha256(blob['access']).hexdigest(),
+                            r.result['credential']['id'])
 
     def test_create_ec2_credential_with_missing_project_id(self):
         """Call ``POST /credentials`` for creating ec2
@@ -316,7 +316,7 @@ class TestCredentialTrustScoped(test_v3.RestfulTestCase):
             user_id=self.trustee_user['id'],
             password=self.trustee_user['password'],
             trust_id=trust['id'])
-        r = self.v3_authenticate_token(auth_data)
+        r = self.v3_create_token(auth_data)
         self.assertValidProjectTrustScopedTokenResponse(r, self.user)
         trust_id = r.result['token']['OS-TRUST:trust']['id']
         token_id = r.headers.get('X-Subject-Token')
@@ -342,8 +342,8 @@ class TestCredentialTrustScoped(test_v3.RestfulTestCase):
 
         # Assert credential id is same as hash of access key id for
         # ec2 credentials
-        self.assertEqual(r.result['credential']['id'],
-                         hashlib.sha256(blob['access']).hexdigest())
+        self.assertEqual(hashlib.sha256(blob['access']).hexdigest(),
+                         r.result['credential']['id'])
 
         # Create second ec2 credential with the same access key id and check
         # for conflict.
@@ -382,7 +382,7 @@ class TestCredentialEc2(CredentialBaseTestCase):
         r = self.post(
             '/ec2tokens',
             body={'ec2Credentials': sig_ref},
-            expected_status=200)
+            expected_status=http_client.OK)
         self.assertValidTokenResponse(r)
 
     def test_ec2_credential_signature_validate(self):
@@ -399,8 +399,8 @@ class TestCredentialEc2(CredentialBaseTestCase):
             body={'credential': ref})
         self.assertValidCredentialResponse(r, ref)
         # Assert credential id is same as hash of access key id
-        self.assertEqual(r.result['credential']['id'],
-                         hashlib.sha256(blob['access']).hexdigest())
+        self.assertEqual(hashlib.sha256(blob['access']).hexdigest(),
+                         r.result['credential']['id'])
 
         cred_blob = json.loads(r.result['credential']['blob'])
         self.assertEqual(blob, cred_blob)

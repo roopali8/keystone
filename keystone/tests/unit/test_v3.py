@@ -12,12 +12,12 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import datetime
 import uuid
 
 from oslo_config import cfg
 from oslo_serialization import jsonutils
 from oslo_utils import timeutils
+from six.moves import http_client
 from testtools import matchers
 
 from keystone import auth
@@ -285,6 +285,9 @@ class RestfulTestCase(unit.SQLDriverOverrides, rest.RestfulTestCase,
         return unit.new_project_ref(domain_id=domain_id, parent_id=parent_id,
                                     is_domain=is_domain)
 
+    def get_policy_password(self):
+        return unit.get_policy_password()
+
     def new_user_ref(self, domain_id, project_id=None):
         return unit.new_user_ref(domain_id, project_id=project_id)
 
@@ -408,10 +411,10 @@ class RestfulTestCase(unit.SQLDriverOverrides, rest.RestfulTestCase,
     def get_requested_token(self, auth):
         """Request the specific token we want."""
 
-        r = self.v3_authenticate_token(auth)
+        r = self.v3_create_token(auth)
         return r.headers.get('X-Subject-Token')
 
-    def v3_authenticate_token(self, auth, expected_status=201):
+    def v3_create_token(self, auth, expected_status=http_client.CREATED):
         return self.admin_request(method='POST',
                                   path='/v3/auth/tokens',
                                   body=auth,
@@ -440,42 +443,31 @@ class RestfulTestCase(unit.SQLDriverOverrides, rest.RestfulTestCase,
 
         return self.admin_request(path=path, token=token, **kwargs)
 
-    def get(self, path, **kwargs):
-        r = self.v3_request(method='GET', path=path, **kwargs)
-        if 'expected_status' not in kwargs:
-            self.assertResponseStatus(r, 200)
-        return r
+    def get(self, path, expected_status=http_client.OK, **kwargs):
+        return self.v3_request(path, method='GET',
+                               expected_status=expected_status, **kwargs)
 
-    def head(self, path, **kwargs):
-        r = self.v3_request(method='HEAD', path=path, **kwargs)
-        if 'expected_status' not in kwargs:
-            self.assertResponseStatus(r, 204)
+    def head(self, path, expected_status=http_client.NO_CONTENT, **kwargs):
+        r = self.v3_request(path, method='HEAD',
+                            expected_status=expected_status, **kwargs)
         self.assertEqual('', r.body)
         return r
 
-    def post(self, path, **kwargs):
-        r = self.v3_request(method='POST', path=path, **kwargs)
-        if 'expected_status' not in kwargs:
-            self.assertResponseStatus(r, 201)
-        return r
+    def post(self, path, expected_status=http_client.CREATED, **kwargs):
+        return self.v3_request(path, method='POST',
+                               expected_status=expected_status, **kwargs)
 
-    def put(self, path, **kwargs):
-        r = self.v3_request(method='PUT', path=path, **kwargs)
-        if 'expected_status' not in kwargs:
-            self.assertResponseStatus(r, 204)
-        return r
+    def put(self, path, expected_status=http_client.NO_CONTENT, **kwargs):
+        return self.v3_request(path, method='PUT',
+                               expected_status=expected_status, **kwargs)
 
-    def patch(self, path, **kwargs):
-        r = self.v3_request(method='PATCH', path=path, **kwargs)
-        if 'expected_status' not in kwargs:
-            self.assertResponseStatus(r, 200)
-        return r
+    def patch(self, path, expected_status=http_client.OK, **kwargs):
+        return self.v3_request(path, method='PATCH',
+                               expected_status=expected_status, **kwargs)
 
-    def delete(self, path, **kwargs):
-        r = self.v3_request(method='DELETE', path=path, **kwargs)
-        if 'expected_status' not in kwargs:
-            self.assertResponseStatus(r, 204)
-        return r
+    def delete(self, path, expected_status=http_client.NO_CONTENT, **kwargs):
+        return self.v3_request(path, method='DELETE',
+                               expected_status=expected_status, **kwargs)
 
     def assertValidErrorResponse(self, r):
         resp = r.result
@@ -582,7 +574,6 @@ class RestfulTestCase(unit.SQLDriverOverrides, rest.RestfulTestCase,
         except Exception:
             msg = '%s is not a valid ISO 8601 extended format date time.' % dt
             raise AssertionError(msg)
-        self.assertIsInstance(dt, datetime.datetime)
 
     def assertValidTokenResponse(self, r, user=None):
         self.assertTrue(r.headers.get('X-Subject-Token'))
@@ -1222,8 +1213,8 @@ class AuthContextMiddlewareTestCase(RestfulTestCase):
         req = self._mock_request_object(CONF.admin_token)
         application = None
         middleware.AuthContextMiddleware(application).process_request(req)
-        self.assertDictEqual(req.environ.get(authorization.AUTH_CONTEXT_ENV),
-                             {})
+        self.assertDictEqual({}, req.environ.get(
+            authorization.AUTH_CONTEXT_ENV))
 
     def test_unscoped_token_auth_context(self):
         unscoped_token = self.get_unscoped_token()

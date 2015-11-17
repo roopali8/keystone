@@ -26,7 +26,6 @@ from keystone import exception
 from keystone.tests import unit
 from keystone.tests.unit import test_v3
 
-
 CONF = cfg.CONF
 
 
@@ -248,7 +247,7 @@ class IdentityTestCase(test_v3.RestfulTestCase):
             password=self.user2['password'])
         r = self.get('/users/%(user_id)s/groups' % {
             'user_id': self.user1['id']}, auth=auth,
-            expected_status=exception.ForbiddenAction.code)
+                     expected_status=exception.ForbiddenAction.code)
 
     def test_check_user_in_group(self):
         """Call ``HEAD /groups/{group_id}/users/{user_id}``."""
@@ -282,7 +281,7 @@ class IdentityTestCase(test_v3.RestfulTestCase):
         del user['id']
         r = self.patch('/users/%(user_id)s' % {
             'user_id': self.user['id']},
-            body={'user': user})
+                       body={'user': user})
         self.assertValidUserResponse(r, user)
 
     def test_admin_password_reset(self):
@@ -295,32 +294,31 @@ class IdentityTestCase(test_v3.RestfulTestCase):
         old_password_auth = self.build_authentication_request(
             user_id=user_ref['id'],
             password=password)
-        r = self.v3_authenticate_token(old_password_auth, expected_status=201)
+        r = self.v3_create_token(old_password_auth)
         old_token = r.headers.get('X-Subject-Token')
 
         # auth as user with a token should work before a password change
         old_token_auth = self.build_authentication_request(token=old_token)
-        self.v3_authenticate_token(old_token_auth, expected_status=201)
+        self.v3_create_token(old_token_auth)
 
         # administrative password reset
         new_password = uuid.uuid4().hex
         self.patch('/users/%s' % user_ref['id'],
-                   body={'user': {'password': new_password}},
-                   expected_status=200)
+                   body={'user': {'password': new_password}})
 
         # auth as user with original password should not work after change
-        self.v3_authenticate_token(old_password_auth,
-                                   expected_status=http_client.UNAUTHORIZED)
+        self.v3_create_token(old_password_auth,
+                             expected_status=http_client.UNAUTHORIZED)
 
         # auth as user with an old token should not work after change
-        self.v3_authenticate_token(old_token_auth,
-                                   expected_status=http_client.NOT_FOUND)
+        self.v3_create_token(old_token_auth,
+                             expected_status=http_client.NOT_FOUND)
 
         # new password should work
         new_password_auth = self.build_authentication_request(
             user_id=user_ref['id'],
             password=new_password)
-        self.v3_authenticate_token(new_password_auth, expected_status=201)
+        self.v3_create_token(new_password_auth)
 
     def test_update_user_domain_id(self):
         """Call ``PATCH /users/{user_id}`` with domain_id."""
@@ -329,13 +327,13 @@ class IdentityTestCase(test_v3.RestfulTestCase):
         user['domain_id'] = CONF.identity.default_domain_id
         r = self.patch('/users/%(user_id)s' % {
             'user_id': user['id']},
-            body={'user': user},
-            expected_status=exception.ValidationError.code)
+                       body={'user': user},
+                       expected_status=exception.ValidationError.code)
         self.config_fixture.config(domain_id_immutable=False)
         user['domain_id'] = self.domain['id']
         r = self.patch('/users/%(user_id)s' % {
             'user_id': user['id']},
-            body={'user': user})
+                       body={'user': user})
         self.assertValidUserResponse(r, user)
 
     def test_delete_user(self):
@@ -349,7 +347,7 @@ class IdentityTestCase(test_v3.RestfulTestCase):
         """
         # First check the credential for this user is present
         r = self.credential_api.get_credential(self.credential['id'])
-        self.assertDictEqual(r, self.credential)
+        self.assertDictEqual(self.credential, r)
         # Create a second credential with a different user
         self.user2 = self.new_user_ref(
             domain_id=self.domain['id'],
@@ -371,7 +369,7 @@ class IdentityTestCase(test_v3.RestfulTestCase):
         # Confirm token is valid for now
         self.head('/auth/tokens',
                   headers={'X-Subject-Token': token},
-                  expected_status=200)
+                  expected_status=http_client.OK)
 
         # Now delete the user
         self.delete('/users/%(user_id)s' % {
@@ -388,7 +386,7 @@ class IdentityTestCase(test_v3.RestfulTestCase):
         self.assertEqual(0, len(tokens))
         # But the credential for user2 is unaffected
         r = self.credential_api.get_credential(self.credential2['id'])
-        self.assertDictEqual(r, self.credential2)
+        self.assertDictEqual(self.credential2, r)
 
     # group crud tests
 
@@ -424,7 +422,7 @@ class IdentityTestCase(test_v3.RestfulTestCase):
         del group['id']
         r = self.patch('/groups/%(group_id)s' % {
             'group_id': self.group_id},
-            body={'group': group})
+                       body={'group': group})
         self.assertValidGroupResponse(r, group)
 
     def test_update_group_domain_id(self):
@@ -434,13 +432,13 @@ class IdentityTestCase(test_v3.RestfulTestCase):
         group['domain_id'] = CONF.identity.default_domain_id
         r = self.patch('/groups/%(group_id)s' % {
             'group_id': group['id']},
-            body={'group': group},
-            expected_status=exception.ValidationError.code)
+                       body={'group': group},
+                       expected_status=exception.ValidationError.code)
         self.config_fixture.config(domain_id_immutable=False)
         group['domain_id'] = self.domain['id']
         r = self.patch('/groups/%(group_id)s' % {
             'group_id': group['id']},
-            body={'group': group})
+                       body={'group': group})
         self.assertValidGroupResponse(r, group)
 
     def test_delete_group(self):
@@ -474,11 +472,13 @@ class IdentityTestCase(test_v3.RestfulTestCase):
         # administrative password reset
         new_password = uuid.uuid4().hex
         self.patch('/users/%s' % user_ref['id'],
-                   body={'user': {'password': new_password}},
-                   expected_status=200)
+                   body={'user': {'password': new_password}})
 
         self.assertNotIn(password, log_fix.output)
         self.assertNotIn(new_password, log_fix.output)
+
+    ##def test_expired_password(self):
+        ##TODO:  complete test case
 
 
 class IdentityV3toV2MethodsTestCase(unit.TestCase):
@@ -523,52 +523,58 @@ class IdentityV3toV2MethodsTestCase(unit.TestCase):
                                            'username': self.user_id}
 
     def test_v3_to_v2_user_method(self):
-
         updated_user1 = controller.V2Controller.v3_to_v2_user(self.user1)
         self.assertIs(self.user1, updated_user1)
-        self.assertDictEqual(self.user1, self.expected_user)
+        self.assertDictEqual(self.expected_user, self.user1)
         updated_user2 = controller.V2Controller.v3_to_v2_user(self.user2)
         self.assertIs(self.user2, updated_user2)
-        self.assertDictEqual(self.user2, self.expected_user_no_tenant_id)
+        self.assertDictEqual(self.expected_user_no_tenant_id, self.user2)
         updated_user3 = controller.V2Controller.v3_to_v2_user(self.user3)
         self.assertIs(self.user3, updated_user3)
-        self.assertDictEqual(self.user3, self.expected_user)
+        self.assertDictEqual(self.expected_user, self.user3)
         updated_user4 = controller.V2Controller.v3_to_v2_user(self.user4)
         self.assertIs(self.user4, updated_user4)
-        self.assertDictEqual(self.user4, self.expected_user_no_tenant_id)
+        self.assertDictEqual(self.expected_user_no_tenant_id, self.user4)
 
     def test_v3_to_v2_user_method_list(self):
         user_list = [self.user1, self.user2, self.user3, self.user4]
         updated_list = controller.V2Controller.v3_to_v2_user(user_list)
 
-        self.assertEqual(len(updated_list), len(user_list))
+        self.assertEqual(len(user_list), len(updated_list))
 
         for i, ref in enumerate(updated_list):
             # Order should not change.
             self.assertIs(ref, user_list[i])
 
-        self.assertDictEqual(self.user1, self.expected_user)
-        self.assertDictEqual(self.user2, self.expected_user_no_tenant_id)
-        self.assertDictEqual(self.user3, self.expected_user)
-        self.assertDictEqual(self.user4, self.expected_user_no_tenant_id)
+        self.assertDictEqual(self.expected_user, self.user1)
+        self.assertDictEqual(self.expected_user_no_tenant_id, self.user2)
+        self.assertDictEqual(self.expected_user, self.user3)
+        self.assertDictEqual(self.expected_user_no_tenant_id, self.user4)
 
 
 class UserSelfServiceChangingPasswordsTestCase(test_v3.RestfulTestCase):
-
     def setUp(self):
         super(UserSelfServiceChangingPasswordsTestCase, self).setUp()
         self.user_ref = self.new_user_ref(domain_id=self.domain['id'])
         password = self.user_ref['password']
         self.user_ref = self.identity_api.create_user(self.user_ref)
+        # self.user_ref['password'] = password
+        self.user_ref['old_password'] = password
         self.user_ref['password'] = password
-        self.token = self.get_request_token(self.user_ref['password'], 201)
+        new_password = self.get_policy_password()
+        context = {'environment': {'REMOTE_USER': self.user_ref,
+                                   'AUTH_TYPE': 'Negotiate'}}
+        self.identity_api.change_password(context, self.user_ref["id"], password, new_password)
+        self.user_ref['password'] = new_password
+        self.token = self.get_request_token(self.user_ref['password'],
+                                            http_client.CREATED)
 
     def get_request_token(self, password, expected_status):
         auth_data = self.build_authentication_request(
             user_id=self.user_ref['id'],
             password=password)
-        r = self.v3_authenticate_token(auth_data,
-                                       expected_status=expected_status)
+        r = self.v3_create_token(auth_data,
+                                 expected_status=expected_status)
         return r.headers.get('X-Subject-Token')
 
     def change_password(self, expected_status, **kwargs):
@@ -581,30 +587,32 @@ class UserSelfServiceChangingPasswordsTestCase(test_v3.RestfulTestCase):
     def test_changing_password(self):
         # original password works
         token_id = self.get_request_token(self.user_ref['password'],
-                                          expected_status=201)
+                                          expected_status=http_client.CREATED)
         # original token works
         old_token_auth = self.build_authentication_request(token=token_id)
-        self.v3_authenticate_token(old_token_auth, expected_status=201)
+        self.v3_create_token(old_token_auth)
 
         # change password
-        new_password = uuid.uuid4().hex
+        new_password = self.get_policy_password()
+
         self.change_password(password=new_password,
                              original_password=self.user_ref['password'],
-                             expected_status=204)
+                             expected_status=http_client.NO_CONTENT)
 
         # old password fails
         self.get_request_token(self.user_ref['password'],
                                expected_status=http_client.UNAUTHORIZED)
 
         # old token fails
-        self.v3_authenticate_token(old_token_auth,
-                                   expected_status=http_client.NOT_FOUND)
+        self.v3_create_token(old_token_auth,
+                             expected_status=http_client.NOT_FOUND)
 
         # new password works
-        self.get_request_token(new_password, expected_status=201)
+        self.get_request_token(new_password,
+                               expected_status=http_client.CREATED)
 
     def test_changing_password_with_missing_original_password_fails(self):
-        r = self.change_password(password=uuid.uuid4().hex,
+        r = self.change_password(password=self.get_policy_password(),
                                  expected_status=http_client.BAD_REQUEST)
         self.assertThat(r.result['error']['message'],
                         matchers.Contains('original_password'))
@@ -616,8 +624,8 @@ class UserSelfServiceChangingPasswordsTestCase(test_v3.RestfulTestCase):
                         matchers.Contains('password'))
 
     def test_changing_password_with_incorrect_password_fails(self):
-        self.change_password(password=uuid.uuid4().hex,
-                             original_password=uuid.uuid4().hex,
+        self.change_password(password=self.get_policy_password(),
+                             original_password=self.get_policy_password(),
                              expected_status=http_client.UNAUTHORIZED)
 
     def test_changing_password_with_disabled_user_fails(self):
@@ -626,7 +634,7 @@ class UserSelfServiceChangingPasswordsTestCase(test_v3.RestfulTestCase):
         self.patch('/users/%s' % self.user_ref['id'],
                    body={'user': self.user_ref})
 
-        self.change_password(password=uuid.uuid4().hex,
+        self.change_password(password=self.get_policy_password(),
                              original_password=self.user_ref['password'],
                              expected_status=http_client.UNAUTHORIZED)
 
@@ -637,10 +645,36 @@ class UserSelfServiceChangingPasswordsTestCase(test_v3.RestfulTestCase):
         log_fix = self.useFixture(fixtures.FakeLogger(level=logging.DEBUG))
 
         # change password
-        new_password = uuid.uuid4().hex
-        self.change_password(password=new_password,
+        new_password = self.get_policy_password()
+        self.change_password(password=self.get_policy_password(),
                              original_password=self.user_ref['password'],
-                             expected_status=204)
+                             expected_status=http_client.NO_CONTENT)
 
         self.assertNotIn(self.user_ref['password'], log_fix.output)
         self.assertNotIn(new_password, log_fix.output)
+
+    def test_changing_password_not_complying_policy_fails(self):
+        password = "1234"
+        r = self.change_password(password=password,
+                                 original_password=self.user_ref['password'],
+                                 expected_status=http_client.BAD_REQUEST)
+
+        self.assertThat(r.result['error']['message'],
+                        matchers.Contains('password'))
+
+    def test_changing_password_with_same_password_fails(self):
+        r = self.change_password(password=self.user_ref['password'],
+                                 original_password=self.user_ref['password'],
+                                 expected_status=http_client.BAD_REQUEST)
+
+        self.assertThat(r.result['error']['message'],
+                        matchers.Contains('password'))
+
+    def test_changing_password_with_last_used_password_fails(self):
+        #user previous password as the new password to change
+        r = self.change_password(password=self.user_ref['old_password'],
+                                original_password=self.user_ref['password'],
+                                expected_status=http_client.BAD_REQUEST)
+
+        self.assertThat(r.result['error']['message'],
+                        matchers.Contains('Cannot use old passwords'))

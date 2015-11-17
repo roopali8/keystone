@@ -895,6 +895,24 @@ FILE_OPTIONS = {
                    help='Entrypoint for the oAuth1.0 auth plugin module in '
                         'the keystone.auth.oauth1 namespace.'),
     ],
+    'password_policy': [
+        cfg.IntOpt('num_uppercase', default=1,
+                    help='Minimum number of upper case characters.'),
+        cfg.IntOpt('num_lowercase', default=1,
+                   help='Minimum number of lower case characters.'),
+        cfg.IntOpt('num_specialchars', default=1,
+                   help='Minimum number of special characters.'),
+        cfg.IntOpt('num_numeric', default=1,
+                    help='Minimum number of numeric characters'),
+        cfg.IntOpt('min_length', default=8,
+                    help='Minimum length of password'),
+        cfg.IntOpt('max_length', default=-1,
+                    help='Maximum length of password'),
+        cfg.IntOpt('expiry_days', default=60,
+                    help='Number of days after which password is expired'),
+        cfg.IntOpt('num_password_saved', default=3,
+                    help='Number of old password saved')
+    ],
     'tokenless_auth': [
         cfg.MultiStrOpt('trusted_issuer', default=[],
                         help='The list of trusted issuers to further filter '
